@@ -12,39 +12,37 @@ from sqlalchemy import select, func
 
 from app.config import RABBITMQ_URL
 from app.database import SessionLocal
-from app.models import OutboxEvent
+from app.models import OutboxEvent, Job
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-QUEUE_NAME = "jobs"
+QUEUE_NAME = "jobs_priority"
 BATCH_SIZE = 20
 POLL_INTERVAL_SECONDS = 2
+PRIORITY_MAP = {"HIGH": 9, "MEDIUM": 5, "LOW": 1}
 
 
 def dispatch_pending_events(channel):
     db = SessionLocal()
 
     try:
-        events = (
-            db.execute(
-                select(OutboxEvent)
-                .where(
-                    OutboxEvent.published_at.is_(None),
-                    OutboxEvent.available_at <= func.now(),
-                )
-                .order_by(OutboxEvent.available_at, OutboxEvent.created_at)
-                .limit(BATCH_SIZE)
+        events = db.execute(
+            select(OutboxEvent, Job.priority)
+            .join(Job, Job.id == OutboxEvent.job_id)
+            .where(
+                OutboxEvent.published_at.is_(None),
+                OutboxEvent.available_at <= func.now(),
             )
-            .scalars()
-            .all()
-        )
+            .order_by(OutboxEvent.available_at, OutboxEvent.created_at)
+            .limit(BATCH_SIZE)
+        ).all()
 
         if not events:
             return 0
 
-        for event in events:
+        for event, job_priority in events:
             message = {"job_id": event.job_id}
 
             channel.basic_publish(
@@ -55,6 +53,7 @@ def dispatch_pending_events(channel):
                     delivery_mode=2,
                     content_type="application/json",
                     message_id=event.id,
+                    priority=PRIORITY_MAP[job_priority],
                 ),
                 mandatory=True,
             )
@@ -87,7 +86,9 @@ def main():
             connection = pika.BlockingConnection(parameters)
             channel = connection.channel()
 
-            channel.queue_declare(queue=QUEUE_NAME, durable=True)
+            channel.queue_declare(
+                queue=QUEUE_NAME, durable=True, arguments={"x-max-priority": 10}
+            )
 
             channel.confirm_delivery()
 

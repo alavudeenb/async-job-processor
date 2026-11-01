@@ -22,7 +22,7 @@ from uuid import uuid4
 LEASE_DURATION_SECONDS = 60
 LEASE_RENEW_INTERVAL_SECONDS = 20
 
-QUEUE_NAME = "jobs"
+QUEUE_NAME = "jobs_priority"
 
 
 logging.basicConfig(level=logging.INFO)
@@ -507,7 +507,9 @@ def main():
 
     channel = connection.channel()
 
-    channel.queue_declare(queue=QUEUE_NAME, durable=True)
+    channel.queue_declare(
+        queue=QUEUE_NAME, durable=True, arguments={"x-max-priority": 10}
+    )
 
     channel.basic_qos(prefetch_count=1)
 
