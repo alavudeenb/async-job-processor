@@ -1,0 +1,34 @@
+
+flowchart TD
+    Start["Dispatcher starts"] --> Loop["Dispatcher polling loop"]
+
+    Loop --> Recovery["Recover expired RUNNING jobs"]
+    Recovery --> Find["Find jobs where lease_expires_at <= current time"]
+    Find --> Found{"Expired jobs found?"}
+
+    Found -->|"No"| Dispatch
+    Found -->|"Yes"| RetryCheck{"attempt_count > max_retries?"}
+
+    RetryCheck -->|"Yes"| DLQ["Mark job DEAD-LETTERED"]
+    RetryCheck -->|"No"| Requeue["Set job status = QUEUED"]
+    Requeue --> NewEvent["Create new OutboxEvent"]
+    DLQ --> Dispatch
+    NewEvent --> Dispatch
+
+    Dispatch["Dispatch pending outbox events"] --> Fetch["Fetch unpublished events where available_at <= now and job is QUEUED"]
+    Fetch --> Events{"Events found?"}
+
+    Events -->|"No"| Wait["Wait for polling interval"]
+    Events -->|"Yes"| Publish["Publish job_id to RabbitMQ priority queue"]
+    Publish --> Confirm{"Publisher confirm received?"}
+
+    Confirm -->|"Yes"| MarkPublished["Set published_at on OutboxEvent"]
+    MarkPublished --> Commit["Commit database transaction"]
+    Commit --> More{"More events to dispatch?"}
+    More -->|"Yes"| Fetch
+    More -->|"No"| Wait
+
+    Confirm -->|"No / Error"| Rollback["Rollback transaction"]
+    Rollback --> Wait
+
+    Wait --> Loop
