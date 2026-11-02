@@ -19,7 +19,7 @@ app.include_router(jobs.router)
 
 
 @app.get("/")
-def health():
+def Welcome():
     return {"Response": "Welcome"}
 
 
