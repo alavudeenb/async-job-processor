@@ -1,4 +1,3 @@
-import uuid
 import json
 import logging
 import time
@@ -10,6 +9,7 @@ from app.database import SessionLocal
 from app.config import RABBITMQ_URL
 from app.handler_resolver import resolve_handler
 from app.models import OutboxEvent
+from app.retry_policy import calculate_retry_delay
 
 import threading
 import multiprocessing
@@ -473,7 +473,7 @@ def schedule_retry_or_dead_letter(
         # Calculate exponential backoff.
         attempt_count = updated_job["attempt_count"]
 
-        delay_seconds = min(5 * (2 ** (attempt_count - 1)), 300)
+        delay_seconds = calculate_retry_delay(attempt_count)
 
         available_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
 

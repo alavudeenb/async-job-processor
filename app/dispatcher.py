@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+from uuid import uuid4
 
 import pika
 
@@ -24,6 +25,69 @@ POLL_INTERVAL_SECONDS = 2
 PRIORITY_MAP = {"HIGH": 9, "MEDIUM": 5, "LOW": 1}
 
 
+def recover_expired_jobs():
+    db = SessionLocal()
+    recovered_count = 0
+
+    try:
+        expired_jobs = (
+            db.execute(
+                select(Job)
+                .where(
+                    Job.status == "RUNNING",
+                    Job.lease_expires_at <= func.now(),
+                )
+                .order_by(Job.lease_expires_at)
+                .limit(BATCH_SIZE)
+                .with_for_update(of=Job, skip_locked=True)
+            )
+            .scalars()
+            .all()
+        )
+
+        for job in expired_jobs:
+            if job.attempt_count > job.max_retries:
+                job.status = "DEAD-LETTERED"
+                job.last_error = (
+                    job.last_error
+                    or "Worker lease expired after retry limit was exhausted"
+                )
+                job.locked_by = None
+                job.lease_expires_at = None
+                continue
+
+            job.status = "QUEUED"
+            job.locked_by = None
+            job.lease_expires_at = None
+
+            db.add(
+                OutboxEvent(
+                    id=str(uuid4()),
+                    job_id=job.id,
+                    available_at=datetime.now(timezone.utc),
+                )
+            )
+
+            recovered_count += 1
+
+        db.commit()
+
+        if recovered_count:
+            logger.info(
+                "Recovered %s expired jobs",
+                recovered_count,
+            )
+
+        return recovered_count
+
+    except Exception:
+        db.rollback()
+        raise
+
+    finally:
+        db.close()
+
+
 def dispatch_pending_events(channel):
     db = SessionLocal()
 
@@ -34,8 +98,10 @@ def dispatch_pending_events(channel):
             .where(
                 OutboxEvent.published_at.is_(None),
                 OutboxEvent.available_at <= func.now(),
+                Job.status == "QUEUED",
             )
             .order_by(OutboxEvent.available_at, OutboxEvent.created_at)
+            .with_for_update(of=OutboxEvent, skip_locked=True)
             .limit(BATCH_SIZE)
         ).all()
 
@@ -60,11 +126,11 @@ def dispatch_pending_events(channel):
 
             event.published_at = datetime.now(timezone.utc)
 
-            db.commit()
-
             logger.info("Published job id=%s, event id=%s", event.job_id, event.id)
 
-            return len(events)
+        db.commit()
+
+        return len(events)
 
     except Exception:
         db.rollback()
@@ -95,6 +161,8 @@ def main():
             logger.info("Connected to RabbitMQ")
 
             while True:
+                recover_expired_jobs()
+
                 dispatched = dispatch_pending_events(channel)
 
                 if dispatched == 0:
@@ -108,7 +176,7 @@ def main():
             time.sleep(5)
 
         finally:
-            if connection is connection.is_open:
+            if connection is not None and connection.is_open:
                 connection.close()
 
 

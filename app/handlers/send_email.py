@@ -8,6 +8,6 @@ def handle(payload: dict) -> dict:
         raise ValueError("recipient is required")
 
     # actual work
-    time.sleep(10)
+    time.sleep(1)
 
     return {"recipient": recipient, "message": "Email sent successfully"}
