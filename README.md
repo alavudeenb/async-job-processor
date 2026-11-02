@@ -103,3 +103,61 @@ flowchart TD
 
     Wait --> Loop
 ```
+
+### 3. Worker Pool — Job Execution and Retry
+
+The Worker Pool consumes jobs from the RabbitMQ priority queue and atomically claims them in PostgreSQL using leases and fencing tokens.
+
+Each worker executes the registered job handler in a separate process while a heartbeat thread periodically renews the lease.
+
+On successful execution, the worker persists the result and marks the job as SUCCEEDED. On handler failure or timeout, it schedules a retry with exponential backoff or marks the job as DEAD-LETTERED when retries are exhausted.
+
+If ownership is lost, the worker terminates handler execution and requeues the message. RabbitMQ messages are acknowledged only after the corresponding database state transition succeeds.
+
+```mermaid
+flowchart TD
+    Start["Worker receives RabbitMQ message"] --> Parse["Parse message and extract job_id"]
+    Parse --> Valid{"Valid message?"}
+
+    Valid -->|"No"| Invalid["Log invalid message"]
+    Invalid --> AckInvalid["ACK message"]
+
+    Valid -->|"Yes"| Claim["Atomically claim job in PostgreSQL"]
+    Claim --> Claimed{"Claim successful?"}
+
+    Claimed -->|"No"| Log["Log: already claimed or completed"]
+    Log --> AckDuplicate["ACK message"]
+
+    Claimed -->|"Yes"| Lease["Acquire lease; increment attempt_count and lock_version"]
+    Lease --> StartHeartbeat["Start heartbeat thread"]
+    StartHeartbeat --> Execute["Execute handler in child process with timeout"]
+
+    StartHeartbeat -.-> Renew["Periodically renew lease"]
+    Renew -.-> Renewed{"Lease renewal successful?"}
+    Renewed -->|"Yes"| Renew
+    Renewed -->|"No"| Lost["Set ownership_lost event"]
+    Lost -.-> Terminate["Terminate handler process"]
+
+    Execute --> Outcome{"Handler execution outcome?"}
+    Outcome -->|"Success"| StopHeartbeat["Stop heartbeat and join thread"]
+    Outcome -->|"Error / Timeout"| StopHeartbeat
+    Outcome -->|"Ownership lost"| SetLost["Set ownership_lost event"]
+    SetLost --> StopHeartbeat
+
+    StopHeartbeat --> CheckOwnership{"Ownership lost?"}
+    CheckOwnership -->|"Yes"| NackLost["NACK with requeue"]
+    CheckOwnership -->|"No"| Result{"Handler result?"}
+
+    Result -->|"Error / Timeout"| Retry["Schedule retry or dead-letter"]
+    Retry --> RetryOutcome{"Database transition successful?"}
+    RetryOutcome -->|"Retry scheduled"| AckRetry["ACK message"]
+    RetryOutcome -->|"Dead-lettered"| AckRetry
+    RetryOutcome -->|"Update rejected / failed"| NackRetry["NACK with requeue"]
+
+    Result -->|"Success"| Complete["Persist result and mark SUCCEEDED"]
+    Complete --> Fenced{"Fenced completion accepted?"}
+    Fenced -->|"Yes"| AckSuccess["ACK message"]
+    Fenced -->|"No"| NackComplete["NACK with requeue"]
+
+    Terminate -.-> StopHeartbeat
+```

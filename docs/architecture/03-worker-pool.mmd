@@ -1,0 +1,46 @@
+
+flowchart TD
+    Start["Worker receives RabbitMQ message"] --> Parse["Parse message and extract job_id"]
+    Parse --> Valid{"Valid message?"}
+
+    Valid -->|"No"| Invalid["Log invalid message"]
+    Invalid --> AckInvalid["ACK message"]
+
+    Valid -->|"Yes"| Claim["Atomically claim job in PostgreSQL"]
+    Claim --> Claimed{"Claim successful?"}
+
+    Claimed -->|"No"| Log["Log: already claimed or completed"]
+    Log --> AckDuplicate["ACK message"]
+
+    Claimed -->|"Yes"| Lease["Acquire lease; increment attempt_count and lock_version"]
+    Lease --> StartHeartbeat["Start heartbeat thread"]
+    StartHeartbeat --> Execute["Execute handler in child process with timeout"]
+
+    StartHeartbeat -.-> Renew["Periodically renew lease"]
+    Renew -.-> Renewed{"Lease renewal successful?"}
+    Renewed -->|"Yes"| Renew
+    Renewed -->|"No"| Lost["Set ownership_lost event"]
+    Lost -.-> Terminate["Terminate handler process"]
+
+    Execute --> Outcome{"Handler execution outcome?"}
+    Outcome -->|"Success"| StopHeartbeat["Stop heartbeat and join thread"]
+    Outcome -->|"Error / Timeout"| StopHeartbeat
+    Outcome -->|"Ownership lost"| SetLost["Set ownership_lost event"]
+    SetLost --> StopHeartbeat
+
+    StopHeartbeat --> CheckOwnership{"Ownership lost?"}
+    CheckOwnership -->|"Yes"| NackLost["NACK with requeue"]
+    CheckOwnership -->|"No"| Result{"Handler result?"}
+
+    Result -->|"Error / Timeout"| Retry["Schedule retry or dead-letter"]
+    Retry --> RetryOutcome{"Database transition successful?"}
+    RetryOutcome -->|"Retry scheduled"| AckRetry["ACK message"]
+    RetryOutcome -->|"Dead-lettered"| AckRetry
+    RetryOutcome -->|"Update rejected / failed"| NackRetry["NACK with requeue"]
+
+    Result -->|"Success"| Complete["Persist result and mark SUCCEEDED"]
+    Complete --> Fenced{"Fenced completion accepted?"}
+    Fenced -->|"Yes"| AckSuccess["ACK message"]
+    Fenced -->|"No"| NackComplete["NACK with requeue"]
+
+    Terminate -.-> StopHeartbeat
