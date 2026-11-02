@@ -12,11 +12,17 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     yield
 
+
 app = FastAPI(title="Async Job Processing API", lifespan=lifespan)
 
 app.include_router(jobs.router)
 
 
+@app.get("/")
+def health():
+    return {"Response": "Welcome"}
+
+
 @app.get("/health")
 def health():
-    return {"status":"health"}
+    return {"status": "health"}
