@@ -11,10 +11,15 @@ Make sure the following are installed:
 - RabbitMQ
 
   Run below commands in RabbitMQ CLI
-  sudo rabbitmqctl add*user <username> <password>
+
+  sudo rabbitmqctl add\*user <username> <password>
+
   sudo rabbitmqctl add_vhost jobs
-  sudo rabbitmqctl set_permissions -p jobs <username> ".*" ".\_" ".\*"
+
+  sudo rabbitmqctl set_permissions -p jobs <username> ".\*" ".\_" ".\*"
+
   sudo rabbitmqctl set_user_tags <username> management
+
   curl -i -u <username>:<password> -H "content-type: application/json" -X PUT -d '{"durable":true,"auto_delete":false,"arguments":{"x-max-priority":10}}' http://<PUBLIC IP OF RABBITMQ>:15672/api/queues/jobs/jobs_priority
 
 - Git
