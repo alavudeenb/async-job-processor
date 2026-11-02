@@ -297,6 +297,7 @@ def execute_job(connection, channel, delivery_tag, body):
     try:
         message = json.loads(body)
         job_id = message["job_id"]
+        worker_id = f"worker-{uuid4()}"
 
     except (json.JSONDecodeError, KeyError, TypeError):
         logger.exception("Invalid RabbitMQ message")
@@ -305,8 +306,6 @@ def execute_job(connection, channel, delivery_tag, body):
             lambda: channel.basic_ack(delivery_tag=delivery_tag)
         )
         return
-
-    worker_id = f"worker-{uuid.uuid4()}"
 
     try:
         # 1. Claim job from PostgreSQL.
