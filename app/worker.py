@@ -1,23 +1,24 @@
+# Standard library
 import json
 import logging
+import multiprocessing
+import threading
 import time
+from uuid import uuid4
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 
+# Third-party
 import pika
-
 from sqlalchemy import text
+
+# Application
 from app.database import SessionLocal
 from app.config import RABBITMQ_URL
 from app.handler_resolver import resolve_handler
 from app.models import OutboxEvent
 from app.retry_policy import calculate_retry_delay
-
-import threading
-import multiprocessing
-
-from concurrent.futures import ThreadPoolExecutor
-
-from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from app.exceptions import PermanentJobError, RetryableJobError
 
 LEASE_DURATION_SECONDS = 60
 LEASE_RENEW_INTERVAL_SECONDS = 20
@@ -228,6 +229,12 @@ def _run_handler_process(job_type, payload, send_conn):
 
         send_conn.send(("success", result))
 
+    except PermanentJobError as exc:
+        send_conn.send(("permanent_error", f"{type(exc).__name__}: {exc}"))
+
+    except RetryableJobError as exc:
+        send_conn.send(("retryable_error", f"{type(exc).__name__}: {exc}"))
+
     except Exception as exc:
         send_conn.send(("error", f"{type(exc).__name__}: {exc}"))
 
@@ -334,6 +341,7 @@ def execute_job(connection, channel, delivery_tag, body):
         heartbeat.start()
 
         handler_error = None
+        permanent_error = None
         result_payload = None
 
         try:
@@ -356,7 +364,10 @@ def execute_job(connection, channel, delivery_tag, body):
             if status == "success":
                 result_payload = output
 
-            elif status in ("timeout", "error"):
+            elif status == "permanent_error":
+                permanent_error = output
+
+            elif status in ("timeout", "retryable_error", "error"):
                 handler_error = output
 
             elif status == "ownership_lost":
@@ -374,6 +385,26 @@ def execute_job(connection, channel, delivery_tag, body):
             connection.add_callback_threadsafe(
                 lambda: channel.basic_nack(delivery_tag=delivery_tag, requeue=True)
             )
+            return
+
+        # Permanent failure: do not retry.
+        if permanent_error is not None:
+
+            logger.error(
+                "Permanent job failure for job_id=%s: %s", job_id, permanent_error
+            )
+
+            failed = fail_job(job_id, worker_id, lock_version, permanent_error)
+
+            if failed:
+                connection.add_callback_threadsafe(
+                    lambda: channel.basic_ack(delivery_tag=delivery_tag)
+                )
+            else:
+                connection.add_callback_threadsafe(
+                    lambda: channel.basic_nack(delivery_tag=delivery_tag, requeue=True)
+                )
+
             return
 
         # 6. Handle handler exception or timeout.

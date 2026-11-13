@@ -1,11 +1,12 @@
 import time
+from app.exceptions import PermanentJobError, RetryableJobError
 
 
 def handle(payload: dict) -> dict:
     report_id = payload.get("report_id")
 
     if not report_id:
-        raise ValueError("report_id is required")
+        raise PermanentJobError("report_id is required")
 
     # actual work
     time.sleep(20)
