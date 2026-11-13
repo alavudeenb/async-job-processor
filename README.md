@@ -99,13 +99,13 @@ http://localhost:8000/docs
 **Terminal 2 — Dispatcher**
 
 ```bash
-python -m app.dispatcher
+python -m app.dispatcher.dispatcher
 ```
 
 **Terminal 3 — Worker**
 
 ```bash
-python -m app.worker
+python -m app.worker.worker
 ```
 
 The dispatcher and worker processes should remain running while jobs are being processed.
