@@ -1,6 +1,7 @@
+import pytest
 from sqlalchemy.orm import Session
 
-from app.models import Job, OutboxEvent
+from app.storagelayer.models import Job, OutboxEvent
 
 
 def test_create_job_persists_job_and_outbox_event(client):
@@ -22,10 +23,7 @@ def test_create_job_persists_job_and_outbox_event(client):
     assert response_data["status"] == "QUEUED"
 
     # Verify both records were persisted.
-    from app.database import get_db
-
-    db_generator = get_db()
-    db = next(db_generator)
+    from app.storagelayer.database import get_db
 
     try:
         with client.db_session() as db:

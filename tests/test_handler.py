@@ -1,6 +1,6 @@
 import pytest
 
-from app.handler_resolver import resolve_handler
+from app.worker.handler_resolver import resolve_handler
 from app.exceptions import PermanentJobError, RetryableJobError
 
 

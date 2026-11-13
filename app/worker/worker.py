@@ -13,11 +13,11 @@ import pika
 from sqlalchemy import text
 
 # Application
-from app.database import SessionLocal
+from app.storagelayer.database import SessionLocal
 from app.config import RABBITMQ_URL
-from app.handler_resolver import resolve_handler
-from app.models import OutboxEvent
-from app.retry_policy import calculate_retry_delay
+from app.worker.handler_resolver import resolve_handler
+from app.storagelayer.models import OutboxEvent
+from app.worker.handlers.retry_policy import calculate_retry_delay
 from app.exceptions import PermanentJobError, RetryableJobError
 
 LEASE_DURATION_SECONDS = 60

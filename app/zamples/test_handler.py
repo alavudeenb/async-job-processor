@@ -1,4 +1,4 @@
-from app.handler_resolver import resolve_handler
+from app.worker.handler_resolver import resolve_handler
 
 # handler = resolve_handler("generate_report")
 

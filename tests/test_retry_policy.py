@@ -1,6 +1,6 @@
 import pytest
 
-from app.retry_policy import calculate_retry_delay
+from app.worker.handlers.retry_policy import calculate_retry_delay
 
 
 @pytest.mark.parametrize(

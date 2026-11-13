@@ -1,6 +1,6 @@
 import uuid
 
-from app.worker import claim_job, renew_lease, complete_job
+from app.worker.worker import claim_job, renew_lease, complete_job
 
 job_id = input("Enter a queued job ID: ").strip()
 worker_id = f"worker-{uuid.uuid4()}"

@@ -1,7 +1,7 @@
 import multiprocessing
 import threading
 
-from app.worker import run_handler_with_timeout
+from app.worker.worker import run_handler_with_timeout
 
 
 def test_handler_execution_success():

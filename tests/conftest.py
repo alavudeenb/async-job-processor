@@ -5,12 +5,14 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
-from app.main import app
-from app.database import Base, get_db
+from app.api.main import app
+from app.storagelayer import database
+from app.storagelayer.database import Base, get_db
+from app.api.businesslayer import jobprocessor
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):  # 1. Add monkeypatch parameter
     test_engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -22,6 +24,11 @@ def client():
         autoflush=False,
         bind=test_engine,
     )
+
+    # 2. Point both jobprocessor and database to your in-memory SQLite test DB
+    monkeypatch.setattr(jobprocessor, "SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr(database, "SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr(database, "engine", test_engine)
 
     Base.metadata.create_all(bind=test_engine)
 

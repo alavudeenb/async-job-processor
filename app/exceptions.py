@@ -4,3 +4,7 @@ class PermanentJobError(Exception):
 
 class RetryableJobError(Exception):
     pass
+
+
+class JobConflictError(Exception):
+    pass

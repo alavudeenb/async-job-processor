@@ -12,8 +12,8 @@ from sqlalchemy import select, func
 
 
 from app.config import RABBITMQ_URL
-from app.database import SessionLocal
-from app.models import OutboxEvent, Job
+from app.storagelayer.database import SessionLocal
+from app.storagelayer.models import OutboxEvent, Job
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -106,6 +106,7 @@ def dispatch_pending_events(channel):
         ).all()
 
         if not events:
+            db.commit()
             return 0
 
         for event, job_priority in events:

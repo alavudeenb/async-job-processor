@@ -30,6 +30,3 @@ jobs:
 
       - name: Run test suite
         run: python -m pytest -v
-
-      - name: Run test suite
-        run: pytest -v

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import Column, String, Integer, DateTime, JSON, Text
 
-from app.database import Base
+from app.storagelayer.database import Base
 
 
 class Job(Base):
