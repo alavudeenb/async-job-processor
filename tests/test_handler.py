@@ -1,6 +1,7 @@
 import pytest
 
 from app.handler_resolver import resolve_handler
+from app.exceptions import PermanentJobError, RetryableJobError
 
 
 def test_resolve_send_email_handler():
@@ -12,6 +13,13 @@ def test_resolve_send_email_handler():
         "recipient": "abc@xyz.com",
         "message": "Email sent successfully",
     }
+
+
+def test_send_email_retryable_failure():
+    handler = resolve_handler("send_email")
+
+    with pytest.raises(RetryableJobError):
+        handler({"recipient": "abc@xyz.com", "simulate_timeout": True})
 
 
 def test_resolve_generate_report_handler():
@@ -28,7 +36,7 @@ def test_resolve_generate_report_handler():
 def test_generate_report_rejects_missing_report_id():
     handler = resolve_handler("generate_report")
 
-    with pytest.raises(ValueError, match="report_id is required"):
+    with pytest.raises(PermanentJobError, match="report_id is required"):
         handler({})
 
 

@@ -13,7 +13,8 @@ def handle(payload: dict) -> dict:
         time.sleep(1)
 
         # Simulate a temporary failure
-        raise TimeoutError("Email provider timed out")
+        if payload.get("simulate_timeout"):
+            raise TimeoutError("Email provider timed out")
 
     except TimeoutError as exc:
         raise RetryableJobError("Temporary email delivery failure") from exc
