@@ -87,7 +87,7 @@ The API, dispatcher and workers run as independent processes. Open separate term
 **Terminal 1 — Job API**
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.api.main:app --reload
 ```
 
 API documentation is available at:
@@ -332,6 +332,7 @@ On successful execution, the worker persists the result and marks the job as SUC
 If ownership is lost, the worker terminates handler execution and requeues the message. RabbitMQ messages are acknowledged only after the corresponding database state transition succeeds.
 
 ```mermaid
+
 flowchart TD
     Start["Worker receives RabbitMQ message"] --> Parse["Parse message and extract job_id"]
     Parse --> Valid{"Valid message?"}
@@ -357,7 +358,8 @@ flowchart TD
 
     Execute --> Outcome{"Handler execution outcome?"}
     Outcome -->|"Success"| StopHeartbeat["Stop heartbeat and join thread"]
-    Outcome -->|"Error / Timeout"| StopHeartbeat
+    Outcome -->|"PermanentJobError"| StopHeartbeat
+    Outcome -->|"RetryableJobError / Unexpected Error / Timeout"| StopHeartbeat
     Outcome -->|"Ownership lost"| SetLost["Set ownership_lost event"]
     SetLost --> StopHeartbeat
 
@@ -365,7 +367,12 @@ flowchart TD
     CheckOwnership -->|"Yes"| NackLost["NACK with requeue"]
     CheckOwnership -->|"No"| Result{"Handler result?"}
 
-    Result -->|"Error / Timeout"| Retry["Schedule retry or dead-letter"]
+    Result -->|"PermanentJobError"| Permanent["Persist error and mark FAILED"]
+    Permanent --> PermanentFenced{"Fenced update accepted?"}
+    PermanentFenced -->|"Yes"| AckPermanent["ACK message"]
+    PermanentFenced -->|"No"| NackPermanent["NACK with requeue"]
+
+    Result -->|"RetryableJobError / Unexpected Error / Timeout"| Retry["Schedule retry or dead-letter"]
     Retry --> RetryOutcome{"Database transition successful?"}
     RetryOutcome -->|"Retry scheduled"| AckRetry["ACK message"]
     RetryOutcome -->|"Dead-lettered"| AckRetry
@@ -377,6 +384,7 @@ flowchart TD
     Fenced -->|"No"| NackComplete["NACK with requeue"]
 
     Terminate -.-> StopHeartbeat
+
 ```
 
 ## At-Least-Once Delivery and Duplicate Handling
