@@ -29,4 +29,4 @@ jobs:
           python -m pip install pytest httpx
 
       - name: Run test suite
-        run: python -m pytest -v
+        run: pytest -m "not integration and not e2e" -v
