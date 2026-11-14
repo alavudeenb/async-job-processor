@@ -6,10 +6,8 @@ from uuid import uuid4
 
 import pika
 
-
 from datetime import datetime, timezone
 from sqlalchemy import select, func
-
 
 from app.config import RABBITMQ_URL
 from app.storagelayer.database import SessionLocal
@@ -106,7 +104,6 @@ def dispatch_pending_events(channel):
         ).all()
 
         if not events:
-            db.commit()
             return 0
 
         for event, job_priority in events:

@@ -5,10 +5,12 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
+from app.api import main
 from app.api.main import app
 from app.storagelayer import database
 from app.storagelayer.database import Base, get_db
 from app.api.businesslayer import jobprocessor
+from app.worker import worker
 
 
 @pytest.fixture
@@ -26,9 +28,12 @@ def client(monkeypatch):  # 1. Add monkeypatch parameter
     )
 
     # 2. Point both jobprocessor and database to your in-memory SQLite test DB
+    monkeypatch.setattr(main, "engine", test_engine)
     monkeypatch.setattr(jobprocessor, "SessionLocal", TestingSessionLocal)
     monkeypatch.setattr(database, "SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr(worker, "SessionLocal", TestingSessionLocal)
     monkeypatch.setattr(database, "engine", test_engine)
+    monkeypatch.setattr(main, "engine", test_engine)
 
     Base.metadata.create_all(bind=test_engine)
 

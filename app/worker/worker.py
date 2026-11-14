@@ -34,6 +34,8 @@ def claim_job(job_id: str, worker_id: str):
     db = SessionLocal()
 
     try:
+        now = datetime.now(timezone.utc)
+        lease_expires_at = now + timedelta(seconds=LEASE_DURATION_SECONDS)
         result = (
             db.execute(
                 text("""
@@ -41,17 +43,16 @@ def claim_job(job_id: str, worker_id: str):
                 SET
                     status = 'RUNNING',
                     locked_by = :worker_id,
-                    lease_expires_at =
-                        NOW() + (:lease_seconds * INTERVAL '1 second'),
+                    lease_expires_at = :lease_expires_at,
                     lock_version = lock_version + 1,
                     attempt_count = attempt_count + 1,
-                    updated_at = NOW()
+                    updated_at = :now
                 WHERE id = :job_id
                   AND (
                       status = 'QUEUED'
                       OR (
                           status = 'RUNNING'
-                          AND lease_expires_at <= NOW()
+                          AND lease_expires_at <= :now
                       )
                   )
                 RETURNING
@@ -66,7 +67,8 @@ def claim_job(job_id: str, worker_id: str):
                 {
                     "job_id": job_id,
                     "worker_id": worker_id,
-                    "lease_seconds": LEASE_DURATION_SECONDS,
+                    "lease_expires_at": lease_expires_at,
+                    "now": now,
                 },
             )
             .mappings()
@@ -88,24 +90,26 @@ def renew_lease(job_id: str, worker_id: str, lock_version: int) -> bool:
     db = SessionLocal()
 
     try:
+        now = datetime.now(timezone.utc)
+        lease_expires_at = now + timedelta(seconds=LEASE_DURATION_SECONDS)
         result = db.execute(
             text("""
                 UPDATE jobs
                 SET
-                    lease_expires_at =
-                        NOW() + (:lease_seconds * INTERVAL '1 second'),
-                    updated_at = NOW()
+                    lease_expires_at =:lease_expires_at,
+                    updated_at = :now
                 WHERE id = :job_id
                   AND status = 'RUNNING'
                   AND locked_by = :worker_id
                   AND lock_version = :lock_version
-                  AND lease_expires_at > NOW()
+                  AND lease_expires_at > :now
             """),
             {
                 "job_id": job_id,
                 "worker_id": worker_id,
                 "lock_version": lock_version,
-                "lease_seconds": LEASE_DURATION_SECONDS,
+                "lease_expires_at": lease_expires_at,
+                "now": now,
             },
         )
 
@@ -124,6 +128,7 @@ def complete_job(
     db = SessionLocal()
 
     try:
+        now = datetime.now(timezone.utc)
         result = db.execute(
             text("""
                 UPDATE jobs
@@ -132,18 +137,19 @@ def complete_job(
                     result = CAST(:result AS JSON),
                     locked_by = NULL,
                     lease_expires_at = NULL,
-                    updated_at = NOW()
+                    updated_at = :now
                 WHERE id = :job_id
                   AND status = 'RUNNING'
                   AND locked_by = :worker_id
                   AND lock_version = :lock_version
-                  AND lease_expires_at > NOW()
+                  AND lease_expires_at > :now
             """),
             {
                 "job_id": job_id,
                 "worker_id": worker_id,
                 "lock_version": lock_version,
                 "result": json.dumps(result_payload),
+                "now": now,
             },
         )
 
