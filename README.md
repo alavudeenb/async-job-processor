@@ -2,6 +2,8 @@
 
 An asynchronous job processing service built with FastAPI, PostgreSQL, RabbitMQ and Python workers.
 
+![.](docs/architecture/Arch-JobProcessor.png)
+
 ## Prerequisites
 
 Make sure the following are installed:
