@@ -46,6 +46,7 @@ jobs:
 
     env:
       E2E_API_URL: ${{ vars.E2E_API_URL }}
+      DATABASE_URL: ${{vars.DATABASE_URL }}
 
     steps:
       - name: Checkout repository
