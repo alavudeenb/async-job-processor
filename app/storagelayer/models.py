@@ -19,7 +19,7 @@ class Job(Base):
     timeout_seconds = Column(Integer, nullable=False)
     attempt_count = Column(Integer, nullable=False, default=0)
 
-    last_error = Column(String(100), nullable=True)
+    last_error = Column(String(1000), nullable=True)
     result = Column(JSON, nullable=True)
 
     created_at = Column(

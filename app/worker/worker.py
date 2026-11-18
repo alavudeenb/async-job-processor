@@ -188,7 +188,7 @@ def fail_job(
                 "job_id": job_id,
                 "worker_id": worker_id,
                 "lock_version": lock_version,
-                "error_message": error_message[:4000],
+                "error_message": error_message[:1000],
             },
         )
 
@@ -490,7 +490,7 @@ def schedule_retry_or_dead_letter(
                     "job_id": job_id,
                     "worker_id": worker_id,
                     "lock_version": lock_version,
-                    "error_message": error_message[:4000],
+                    "error_message": error_message[:1000],
                 },
             )
             .mappings()
