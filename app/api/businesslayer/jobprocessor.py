@@ -141,19 +141,22 @@ def cancel_job(job_id: str):
 def drain_jobs():
     db = SessionLocal()
     try:
-        # 1. Select and lock all queued jobs
-        jobs = db.query(Job).filter(Job.status == "QUEUED").with_for_update().all()
+        cancelled_count = (
+            db.query(Job)
+            .filter(Job.status == "QUEUED")
+            .update(
+                {
+                    Job.status: "CANCELLED",
+                    Job.updated_at: func.now(),
+                },
+                synchronize_session=False,
+            )
+        )
 
-        # 2. Update the locked rows
-        for job in jobs:
-            job.status = "CANCELLED"
-            job.updated_at = func.now()
-
-        # 3. Commit and release locks
         db.commit()
 
         return {
-            "cancelled_count": len(jobs),
+            "cancelled_count": cancelled_count,
             "message": "Pending jobs drained successfully",
         }
     except Exception as exc:

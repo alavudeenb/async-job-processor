@@ -159,11 +159,11 @@ def main():
             logger.info("Connected to RabbitMQ")
 
             while True:
-                recover_expired_jobs()
+                recovered_count = recover_expired_jobs()
 
                 dispatched = dispatch_pending_events(channel)
 
-                if dispatched == 0:
+                if recovered_count == 0 and dispatched == 0:
                     time.sleep(POLL_INTERVAL_SECONDS)
         except KeyboardInterrupt:
             logger.info("Dispatcher stopped")
